@@ -1,0 +1,37 @@
+{
+  "appId": "com.chromadash.game",
+  "appName": "ChromaDash",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "AdMob": {
+      "appId": {
+        "android": "ca-app-pub-9365652468083873~6420290842",
+        "ios": "ca-app-pub-9365652468083873~6420290842"
+      }
+    },
+    "SplashScreen": {
+      "launchShowDuration": 1000,
+      "launchAutoHide": true,
+      "backgroundColor": "#0a0a1a",
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP"
+    },
+    "StatusBar": {
+      "style": "Dark",
+      "backgroundColor": "#0a0a1a"
+    }
+  },
+  "android": {
+    "buildOptions": {
+      "keystorePath": "release-key.keystore",
+      "keystorePassword": "chromadash",
+      "keystoreAlias": "chromadash",
+      "keystoreAliasPassword": "chromadash",
+      "releaseType": "APK"
+    }
+  },
+  "ios": {
+    "scheme": "ChromaDash"
+  }
+}

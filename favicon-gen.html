@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  canvas { display: block; }
+  body { margin: 0; background: #080818; }
+</style>
+</head>
+<body>
+<canvas id="c" width="32" height="32"></canvas>
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+
+// Dark background
+ctx.fillStyle = '#080818';
+ctx.fillRect(0, 0, 32, 32);
+
+// Rounded square (player shape)
+ctx.fillStyle = '#00AAFF';
+ctx.beginPath();
+ctx.roundRect(6, 6, 20, 20, 4);
+ctx.fill();
+
+// Inner glow
+ctx.fillStyle = '#00FF99';
+ctx.beginPath();
+ctx.roundRect(10, 10, 12, 12, 2);
+ctx.fill();
+
+// White center dot
+ctx.fillStyle = '#FFFFFF';
+ctx.beginPath();
+ctx.arc(16, 16, 3, 0, Math.PI * 2);
+ctx.fill();
+
+// Export as data URL
+const link = document.createElement('a');
+link.download = 'favicon.ico';
+link.href = c.toDataURL();
+console.log(link.href);
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+/* ChromaDash — Global Styles */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Exo+2:wght@400;600;700;800&display=swap');
+
+/* ─── RESET ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ─── ROOT ───────────────────────────────────────────────────────────────────── */
+:root {
+  --color-bg: #080818;
+  --color-red: #FF2D55;
+  --color-blue: #00AAFF;
+  --color-green: #00FF99;
+  --color-gold: #FFD700;
+  --color-panel: #1A1A35;
+  font-size: 16px;
+}
+
+/* ─── BODY ───────────────────────────────────────────────────────────────────── */
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-bg);
+  font-family: 'Exo 2', sans-serif;
+  touch-action: none;           /* Prevent default scroll on mobile */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* ─── GAME CONTAINER ─────────────────────────────────────────────────────────── */
+#game-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+}
+
+/* Phaser canvas */
+#game-container canvas {
+  display: block;
+  /* Prevent tap zoom on double-tap */
+  touch-action: none;
+}
+
+/* ─── LOADING SCREEN (before Phaser boots) ───────────────────────────────────── */
+#loading-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.5s ease;
+}
+
+#loading-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#loading-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(32px, 10vw, 52px);
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 0 30px var(--color-blue);
+  letter-spacing: 2px;
+}
+
+#loading-subtitle {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(26px, 8vw, 42px);
+  font-weight: 700;
+  color: var(--color-green);
+  letter-spacing: 4px;
+  margin-top: -8px;
+}
+
+#loading-bar-container {
+  margin-top: 48px;
+  width: min(280px, 60vw);
+  height: 6px;
+  background: #1a1a35;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#loading-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--color-blue), var(--color-green));
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  animation: loadingPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes loadingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ─── PREVENT CONTEXT MENU ───────────────────────────────────────────────────── */
+canvas {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+}

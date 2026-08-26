@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ChromaDash</string>
+    <string name="title_activity_main">ChromaDash</string>
+    <string name="package_name">com.chromadash.game</string>
+    <string name="custom_url_scheme">com.chromadash.game</string>
+</resources>

@@ -1,0 +1,28 @@
+{
+  "name": "chromadash",
+  "version": "1.0.0",
+  "description": "ChromaDash - Hyper-casual color-matching runner game",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx serve . -p 3000",
+    "sync:web": "robocopy index.html www . /E /IS & robocopy css www\\css /E /IS & robocopy js www\\js /E /IS",
+    "build": "npm run sync:web",
+    "cap:sync": "npm run build && npx cap sync",
+    "android": "npm run build && npx cap sync android && npx cap open android",
+    "ios": "npm run build && npx cap sync ios && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor-community/admob": "^6.0.0",
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/haptics": "^6.0.0",
+    "@capacitor/ios": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "serve": "^14.0.0"
+  },
+  "keywords": ["game", "hyper-casual", "android", "ios", "phaser"],
+  "author": "ChromaDash Team",
+  "license": "MIT"
+}
