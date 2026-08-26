@@ -1,9 +1,6 @@
 /**
- * ChromaDash — Obstacle Gate
- * A colored gate that the player must match to pass through.
- *
- * Architecture: Graphics draw at (0,0) relative coords.
- * Position is tracked via this.y (logical) and graphics.setPosition(x, y).
+ * ChromaDash — Obstacle Block
+ * A colored block that occupies a single lane.
  */
 import GameConfig from '../config/GameConfig.js';
 import Colors from '../config/Colors.js';
@@ -11,179 +8,168 @@ import AudioManager from '../systems/AudioManager.js';
 import HapticsManager from '../systems/HapticsManager.js';
 
 export const ObstacleType = {
-  SINGLE: 'single',
-  DOUBLE: 'double',
-  RAPID:  'rapid',
+  STATIC: 'static',
+  MOVING: 'moving',
 };
 
 export default class Obstacle {
   /**
    * @param {Phaser.Scene} scene
-   * @param {number} centerX - lane center X
-   * @param {number} y       - spawn Y (above screen, e.g. -60)
-   * @param {number} colorIndex
+   * @param {number} laneIndex
+   * @param {function} getLaneX - function(laneIndex) returns X coord
+   * @param {number} y - spawn Y
    * @param {string} type
-   * @param {number} laneWidth
    */
-  constructor(scene, centerX, y, colorIndex, type = ObstacleType.SINGLE, laneWidth = GameConfig.LANE_WIDTH) {
+  constructor(scene, laneIndex, getLaneX, y, type = ObstacleType.STATIC) {
     this.scene      = scene;
-    this.centerX    = centerX;
-    this.y          = y;           // logical center Y
-    this.colorIndex = colorIndex;
+    this.laneIndex  = laneIndex;
+    this.getLaneX   = getLaneX;
+    this.y          = y;
     this.type       = type;
-    this.laneWidth  = laneWidth;
     this.passed     = false;
     this.destroyed  = false;
+    this.timeAlive  = 0;
+    
+    // For MOVING obstacles
+    this.targetLane = laneIndex;
+    this.moveTimer  = Phaser.Math.Between(1000, 2000);
 
-    // Graphics draw RELATIVE to their own position (0,0 = gate center)
     this.graphics     = scene.add.graphics();
     this.glowGraphics = scene.add.graphics();
 
     this.graphics.setDepth(8);
     this.glowGraphics.setDepth(7);
 
-    // Color label
-    const color = Colors.getGame(colorIndex);
-    this.label = scene.add.text(centerX, y, color.name, {
-      fontFamily: '"Exo 2", "Orbitron", sans-serif',
-      fontSize: '13px',
-      fontStyle: 'bold',
-      color: color.hexStr,
-      alpha: 0.85,
-    }).setOrigin(0.5, 0.5).setDepth(9);
+    // Color based on lane
+    this.color = Colors.getGame(this.laneIndex);
 
     this._draw();
     this._startGlowAnimation();
   }
 
-  /** Draw at (0,0) local coords — graphics.setPosition() handles world position */
   _draw() {
     const g   = this.graphics;
     const gg  = this.glowGraphics;
-    const color = Colors.getGame(this.colorIndex);
-    const W     = this.laneWidth;
-    const H     = GameConfig.OBSTACLE_HEIGHT;
-    const GAP   = this.type === ObstacleType.RAPID
-      ? GameConfig.OBSTACLE_GAP * 0.75
-      : GameConfig.OBSTACLE_GAP;
-    const halfGap  = GAP / 2;
-    const lx       = this.centerX - W / 2;
-    const leftBarW = W / 2 - halfGap;
+    const W   = GameConfig.LANE_WIDTH - 10; // slightly smaller than full lane
+    const H   = GameConfig.OBSTACLE_HEIGHT;
+    const lx  = -W / 2;
 
     g.clear();
     gg.clear();
+    
+    this.color = Colors.getGame(this.laneIndex);
 
-    // Glow behind (drawn at world coords, positioned via setPosition)
-    gg.fillStyle(color.hex, 0.08);
-    gg.fillRect(lx - 10, -H / 2 - 4, W + 20, H + 8);
+    // Glow behind
+    gg.fillStyle(this.color.hex, 0.2);
+    gg.fillRect(lx - 10, -H / 2 - 10, W + 20, H + 20);
 
-    // Left bar
-    g.fillStyle(color.hex, 1);
-    g.fillRect(lx, -H / 2, leftBarW, H);
+    // Block
+    g.fillStyle(this.color.hex, 1);
+    g.fillRect(lx, -H / 2, W, H);
+    
+    // Shine / Pattern
+    g.fillStyle(0xffffff, 0.2);
+    g.fillRect(lx, -H / 2, W, 8);
+    
+    // Danger stripes
+    g.lineStyle(2, 0x000000, 0.2);
+    for (let i = lx + 10; i < lx + W; i += 20) {
+      g.beginPath();
+      g.moveTo(i, -H / 2);
+      g.lineTo(i - 10, H / 2);
+      g.strokePath();
+    }
 
-    // Right bar
-    g.fillRect(lx + W / 2 + halfGap, -H / 2, leftBarW, H);
+    // Border glow
+    g.lineStyle(3, this.color.glow, 1);
+    g.strokeRect(lx, -H / 2, W, H);
 
-    // Shine
-    g.fillStyle(0xffffff, 0.18);
-    g.fillRect(lx, -H / 2, leftBarW, 4);
-    g.fillRect(lx + W / 2 + halfGap, -H / 2, leftBarW, 4);
-
-    // Gap guide lines
-    g.lineStyle(2, color.hex, 0.6);
-    g.beginPath();
-    g.moveTo(this.centerX - halfGap, -H / 2 - 8);
-    g.lineTo(this.centerX - halfGap,  H / 2 + 8);
-    g.moveTo(this.centerX + halfGap, -H / 2 - 8);
-    g.lineTo(this.centerX + halfGap,  H / 2 + 8);
-    g.strokePath();
-
-    // Color border glow
-    g.lineStyle(3, color.glow, 1);
-    g.strokeRect(lx, -H / 2, leftBarW, H);
-    g.strokeRect(lx + W / 2 + halfGap, -H / 2, leftBarW, H);
-
-    // Position at current world Y
-    g.setPosition(0, this.y);
-    gg.setPosition(0, this.y);
-    this.label.setPosition(this.centerX, this.y);
-    this.label.setColor(color.hexStr);
+    const cx = this.getLaneX(this.laneIndex);
+    g.setPosition(cx, this.y);
+    gg.setPosition(cx, this.y);
   }
 
   _startGlowAnimation() {
     this._glowTween = this.scene.tweens.add({
       targets: this.glowGraphics,
       alpha: { from: 0.5, to: 1 },
-      duration: 600,
+      duration: 500,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
   }
 
-  /** Move the obstacle downward each frame */
   update(speed, delta) {
     const dy = (speed * delta) / 1000;
     this.y += dy;
-    // Update graphics world position
-    this.graphics.y     = this.y;
-    this.glowGraphics.y = this.y;
-    this.label.y        = this.y;
+    this.timeAlive += delta;
+    
+    // Moving logic
+    if (this.type === ObstacleType.MOVING) {
+      this.moveTimer -= delta;
+      if (this.moveTimer <= 0) {
+        // Change lane to adjacent
+        const dirs = [];
+        if (this.laneIndex > 0) dirs.push(-1);
+        if (this.laneIndex < 2) dirs.push(1);
+        this.laneIndex += dirs[Math.floor(Math.random() * dirs.length)];
+        this.moveTimer = 2000; // won't move again before dying usually
+        this._draw(); // Redraw with new color/pos
+      }
+    }
+
+    const cx = this.getLaneX(this.laneIndex);
+    this.graphics.setPosition(cx, this.y);
+    this.glowGraphics.setPosition(cx, this.y);
   }
 
   /** Check collision result: 'pass' | 'hit' | 'shield' | 'none' */
-  checkPlayer(playerX, playerY, playerColorIndex, playerHasShield) {
-    const H       = GameConfig.OBSTACLE_HEIGHT;
-    const GAP     = this.type === ObstacleType.RAPID
-      ? GameConfig.OBSTACLE_GAP * 0.75
-      : GameConfig.OBSTACLE_GAP;
-    const halfGap = GAP / 2;
+  checkPlayer(playerLane, playerY, playerHasShield) {
+    const H = GameConfig.OBSTACLE_HEIGHT;
+    
+    // Not vertically overlapping?
+    if (playerY < this.y - H / 2 - 10 || playerY > this.y + H / 2 + 10) return 'none';
 
-    // Vertical overlap?
-    if (playerY < this.y - H / 2 - 8 || playerY > this.y + H / 2 + 8) return 'none';
-
-    const inGap     = playerX > this.centerX - halfGap + 6 && playerX < this.centerX + halfGap - 6;
-    const colorMatch = playerColorIndex === this.colorIndex;
-
-    if (!this.passed) {
-      if (inGap && colorMatch) {
-        this.passed = true;
-        this._onSuccess();
-        return 'pass';
-      } else if (!inGap) {
-        if (playerHasShield) {
+    // Overlapping vertically. Check lane.
+    if (playerLane === this.laneIndex) {
+       // Collision!
+       if (playerHasShield) {
           this.passed = true;
+          this._onSuccess(); // visually destroy it
           return 'shield';
-        }
-        return 'hit';
-      }
+       }
+       return 'hit';
     }
+
+    // If different lane, it's a pass once we go past it (handled externally by checking playerY < obs.y)
     return 'none';
   }
 
   _onSuccess() {
-    // Success burst — Arc GameObjects so position tweening works correctly
-    const color = Colors.getGame(this.colorIndex);
-    for (let i = 0; i < 10; i++) {
-      const px   = this.centerX + Phaser.Math.Between(-30, 30);
+    for (let i = 0; i < 12; i++) {
+      const px   = this.graphics.x + Phaser.Math.Between(-30, 30);
       const py   = this.y;
-      const size = Phaser.Math.Between(3, 7);
-      const p    = this.scene.add.arc(px, py, size, 0, 360, false, color.hex, 1);
+      const size = Phaser.Math.Between(4, 9);
+      const p    = this.scene.add.rectangle(px, py, size, size, this.color.hex, 1);
       p.setDepth(25);
       this.scene.tweens.add({
         targets: p,
-        x: px + Phaser.Math.Between(-40, 40),
-        y: py - Phaser.Math.Between(30, 80),
+        x: px + Phaser.Math.Between(-50, 50),
+        y: py - Phaser.Math.Between(40, 100),
         alpha: 0,
+        angle: Phaser.Math.Between(0, 360),
         scaleX: 0.3,
         scaleY: 0.3,
-        duration: 400,
+        duration: 500,
         ease: 'Power2',
         onComplete: () => p.destroy(),
       });
     }
-    AudioManager.colorMatch();
-    HapticsManager.medium();
+    
+    // Hide graphics immediately
+    this.graphics.setVisible(false);
+    this.glowGraphics.setVisible(false);
   }
 
   isOffScreen(screenHeight) {
@@ -196,6 +182,5 @@ export default class Obstacle {
     if (this._glowTween) this._glowTween.remove();
     this.graphics.destroy();
     this.glowGraphics.destroy();
-    this.label.destroy();
   }
 }

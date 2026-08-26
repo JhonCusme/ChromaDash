@@ -14,7 +14,7 @@ export const PowerUpType = {
 };
 
 const POWERUP_STYLES = {
-  [PowerUpType.SHIELD]: { color: Colors.SHIELD, symbol: '🛡', label: 'SHIELD' },
+  [PowerUpType.SHIELD]: { color: Colors.SHIELD, symbol: '🛹', label: 'HOVERBOARD' },
   [PowerUpType.SLOWMO]: { color: Colors.SLOWMO, symbol: '⏱', label: 'SLOW-MO' },
   [PowerUpType.MAGNET]: { color: Colors.MAGNET, symbol: '🧲', label: 'MAGNET' },
 };
@@ -130,6 +130,28 @@ export default class PowerUp {
     if (this._glowTween)  this._glowTween.remove();
 
     AudioManager.powerUp();
+
+    // Burst particles
+    for (let i = 0; i < 16; i++) {
+      const angle = (i / 16) * Math.PI * 2;
+      const speed = Phaser.Math.Between(80, 150);
+      const size  = Phaser.Math.Between(3, 7);
+      
+      const p = this.scene.add.arc(this.x, this.y, size, 0, 360, false, this.style.color, 1);
+      p.setDepth(20);
+      
+      this.scene.tweens.add({
+        targets: p,
+        x: this.x + Math.cos(angle) * speed,
+        y: this.y + Math.sin(angle) * speed,
+        alpha: 0,
+        scaleX: 0.2,
+        scaleY: 0.2,
+        duration: Phaser.Math.Between(400, 700),
+        ease: 'Power2',
+        onComplete: () => p.destroy(),
+      });
+    }
 
     // Burst expand
     this.scene.tweens.add({

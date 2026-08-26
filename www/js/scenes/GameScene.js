@@ -18,6 +18,7 @@ import PowerUp, { PowerUpType } from '../objects/PowerUp.js';
 import SaveSystem from '../systems/SaveSystem.js';
 import AudioManager from '../systems/AudioManager.js';
 import HapticsManager from '../systems/HapticsManager.js';
+import MissionsSystem from '../systems/MissionsSystem.js';
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -46,16 +47,30 @@ export default class GameScene extends Phaser.Scene {
     this.elapsedMs    = 0;
     this.distanceM    = this.isRevive ? this.reviveScore : 0; // meters
 
+    // Biome system
+    this.currentBiome = 0; // 0 = Neon, 1 = Cyberpunk, 2 = Deep Space
+    this.biomeColors = [
+      { bg: Phaser.Display.Color.HexStringToColor(Colors.BG_DARK), grid: 0x1A1A40 },
+      { bg: Phaser.Display.Color.HexStringToColor('#1A052A'), grid: 0x4A0033 },
+      { bg: Phaser.Display.Color.HexStringToColor('#05050A'), grid: 0x332200 },
+    ];
+    this.currentBgColorObj = new Phaser.Display.Color().setFromRGB(this.biomeColors[0].bg);
+    this.currentGridColor = this.biomeColors[0].grid;
+
     // Combo system
     this.combo        = 0;
     this.comboMax     = 0;
 
-    // Power-up timers
+    // Power-up & Fever timers
     this.shieldActive = false;
     this.slowmoActive = false;
     this.magnetActive = false;
     this.slowmoTimer  = 0;
     this.magnetTimer  = 0;
+    this.feverActive  = false;
+    this.feverTimer   = 0;
+
+    this.totalDodges  = 0;
 
     // Object pools
     this.obstacles = [];
@@ -66,8 +81,6 @@ export default class GameScene extends Phaser.Scene {
     this.nextObstacleIn = 1200; // give player a moment before first obstacle
     this.nextCoinIn     = 800;
     this.nextPowerupIn  = Phaser.Math.Between(6000, 10000);
-
-    this.laneX = W / 2;
 
     // ── BUILD SCENE ────────────────────────────────────────────────────────────
     this._createBackground();
@@ -93,7 +106,7 @@ export default class GameScene extends Phaser.Scene {
     const W = this.W, H = this.H;
 
     this.bg = this.add.graphics();
-    this.bg.fillStyle(Colors.BG_DARK, 1);
+    this.bg.fillStyle(this.currentBgColorObj.color, 1);
     this.bg.fillRect(0, 0, W, H);
     this.bg.setDepth(0);
 
@@ -103,12 +116,20 @@ export default class GameScene extends Phaser.Scene {
     const lineCount = Math.ceil(H / 80) + 2;
     for (let i = 0; i < lineCount; i++) {
       const g = this.add.graphics().setDepth(1);
-      g.lineStyle(1, 0x1A1A40, 1);
+      g.lineStyle(1, this.currentGridColor, 1);
       g.beginPath();
       g.moveTo(0, i * 80);
       g.lineTo(W, i * 80);
       g.strokePath();
       this.gridLines.push({ g, baseY: i * 80 });
+    }
+
+    // Warp speed lines
+    this.speedLines = [];
+    for (let i = 0; i < 25; i++) {
+      const line = this.add.graphics().setDepth(1);
+      this._resetSpeedLine(line, true);
+      this.speedLines.push(line);
     }
 
     // Ambient side glows
@@ -117,10 +138,19 @@ export default class GameScene extends Phaser.Scene {
     this._updateAmbientGlow(Colors.GAME[0].hex);
   }
 
+  _resetSpeedLine(line, randomY = false) {
+    const W = this.W, H = this.H;
+    line.xPos = Phaser.Math.Between(0, W);
+    line.yPos = randomY ? Phaser.Math.Between(-H, H) : Phaser.Math.Between(-H, -100);
+    line.length = Phaser.Math.Between(30, 100);
+    line.alphaVal = Phaser.Math.FloatBetween(0.1, 0.4);
+    line.speedMult = Phaser.Math.FloatBetween(1.2, 2.8);
+  }
+
   _updateAmbientGlow(colorHex) {
     const W = this.W, H = this.H;
-    const lx = this.laneX - GameConfig.LANE_WIDTH / 2;
-    const rx = this.laneX + GameConfig.LANE_WIDTH / 2;
+    const lx = this.getLaneX(0) - GameConfig.LANE_WIDTH / 2;
+    const rx = this.getLaneX(2) + GameConfig.LANE_WIDTH / 2;
     this.leftGlow.clear();
     this.rightGlow.clear();
     this.leftGlow.fillStyle(colorHex, 0.06);
@@ -129,33 +159,45 @@ export default class GameScene extends Phaser.Scene {
     this.rightGlow.fillRect(rx, 0, W - rx, H);
   }
 
+  getLaneX(index) {
+    const w = GameConfig.LANE_WIDTH;
+    return this.W / 2 + (index - 1) * w;
+  }
+
   _createLane() {
     const W = this.W, H = this.H;
-    const lx = this.laneX - GameConfig.LANE_WIDTH / 2;
 
-    this.add.graphics()
-      .setDepth(2)
-      .fillStyle(Colors.BG_LANE, 1)
-      .fillRect(lx, 0, GameConfig.LANE_WIDTH, H);
+    // Draw 3 lanes
+    for (let i = 0; i < 3; i++) {
+      const cx = this.getLaneX(i);
+      const color = Colors.GAME[i].hex;
+      this.add.graphics()
+        .setDepth(2)
+        .fillStyle(color, 0.04) // subtle tint
+        .fillRect(cx - GameConfig.LANE_WIDTH / 2, 0, GameConfig.LANE_WIDTH, H);
+    }
 
     this.laneBorderL = this.add.graphics().setDepth(3);
     this.laneBorderR = this.add.graphics().setDepth(3);
     this._drawLaneBorders(Colors.BG_LANE_BORDER);
 
-    // Center dashed line
+    // Separators
     const cl = this.add.graphics().setDepth(3);
     cl.lineStyle(1, 0x252550, 0.5);
-    for (let y = 0; y < H; y += 35) {
-      cl.beginPath();
-      cl.moveTo(this.laneX, y);
-      cl.lineTo(this.laneX, y + 20);
-      cl.strokePath();
+    for (let i = 0; i < 2; i++) {
+      const x = this.getLaneX(i) + GameConfig.LANE_WIDTH / 2;
+      for (let y = 0; y < H; y += 35) {
+        cl.beginPath();
+        cl.moveTo(x, y);
+        cl.lineTo(x, y + 20);
+        cl.strokePath();
+      }
     }
   }
 
   _drawLaneBorders(color) {
-    const lx = this.laneX - GameConfig.LANE_WIDTH / 2;
-    const rx = this.laneX + GameConfig.LANE_WIDTH / 2;
+    const lx = this.getLaneX(0) - GameConfig.LANE_WIDTH / 2;
+    const rx = this.getLaneX(2) + GameConfig.LANE_WIDTH / 2;
     const H  = this.H;
     this.laneBorderL.clear();
     this.laneBorderL.lineStyle(GameConfig.LANE_BORDER, color, 1);
@@ -173,7 +215,7 @@ export default class GameScene extends Phaser.Scene {
 
   _createPlayer() {
     const skin = SaveSystem.get('activeSkin') || 'default';
-    this.player = new Player(this, this.laneX, this.H * GameConfig.PLAYER_Y_RATIO, skin);
+    this.player = new Player(this, 1, this.getLaneX.bind(this), this.H * GameConfig.PLAYER_Y_RATIO, skin);
     this._updateAmbientGlow(Colors.GAME[this.player.colorIndex].hex);
   }
 
@@ -296,11 +338,39 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _createInputs() {
-    this.input.on('pointerdown', (pointer) => {
-      if (this.gameOver || this.counting || this.paused) return;
-      this.player.cycleColor();
-      this._drawColorBar();
-      this._updateAmbientGlow(Colors.getGame(this.player.colorIndex).hex);
+    let startX = 0;
+    let startY = 0;
+    
+    this.input.on('pointerdown', (ptr) => {
+      if (this.gameOver || this.paused || this.counting) return;
+      startX = ptr.x;
+      startY = ptr.y;
+    });
+
+    this.input.on('pointerup', (ptr) => {
+      if (this.gameOver || this.paused || this.counting) return;
+      if (this.player.isSwitching) return;
+
+      const dx = ptr.x - startX;
+      const dy = ptr.y - startY;
+
+      // Check if it's a swipe
+      if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0 && this.player.currentLane < 2) {
+          this.player.moveToLane(this.player.currentLane + 1);
+        } else if (dx < 0 && this.player.currentLane > 0) {
+          this.player.moveToLane(this.player.currentLane - 1);
+        }
+      } else {
+        // It's a tap. Left half = move left, Right half = move right
+        if (ptr.x < this.W / 2 && this.player.currentLane > 0) {
+          this.player.moveToLane(this.player.currentLane - 1);
+        } else if (ptr.x >= this.W / 2 && this.player.currentLane < 2) {
+          this.player.moveToLane(this.player.currentLane + 1);
+        }
+      }
+
+      this._updateAmbientGlow(Colors.GAME[this.player.currentLane].hex);
     });
   }
 
@@ -470,6 +540,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.elapsedMs += delta;
 
+    this._updateBiome(delta);
     this._updateDifficulty(delta);
     this._scrollGrid(delta);
     this._updateSpawners(delta);
@@ -479,6 +550,36 @@ export default class GameScene extends Phaser.Scene {
     this.player.updateTrail();
     this._updateScore(delta);
     this._updatePowerUpTimers(delta);
+  }
+
+  _updateBiome(delta) {
+    let targetBiomeIdx = 0;
+    if (this.distanceM > 1200) targetBiomeIdx = 2;
+    else if (this.distanceM > 500) targetBiomeIdx = 1;
+
+    if (this.currentBiome !== targetBiomeIdx) {
+      this.currentBiome = targetBiomeIdx;
+      this.currentGridColor = this.biomeColors[this.currentBiome].grid;
+      
+      // Flash transition text if not dead
+      if (!this.gameOver) {
+         const biomeNames = ["NEON CITY", "CYBERPUNK", "DEEP SPACE"];
+         this._showFloatingText(biomeNames[this.currentBiome], 0x00FF99);
+      }
+    }
+
+    // Interpolate background color smoothly
+    const targetBg = this.biomeColors[this.currentBiome].bg;
+    
+    // Very slow interpolation
+    this.currentBgColorObj.r += (targetBg.r - this.currentBgColorObj.r) * 0.005;
+    this.currentBgColorObj.g += (targetBg.g - this.currentBgColorObj.g) * 0.005;
+    this.currentBgColorObj.b += (targetBg.b - this.currentBgColorObj.b) * 0.005;
+
+    // Redraw bg
+    this.bg.clear();
+    this.bg.fillStyle(this.currentBgColorObj.color, 1);
+    this.bg.fillRect(0, 0, this.W, this.H);
   }
 
   _updateDifficulty(delta) {
@@ -500,11 +601,36 @@ export default class GameScene extends Phaser.Scene {
     this.gridLines.forEach(({ g, baseY }) => {
       const y = ((baseY + this.gridOffset) % (this.H + 80)) - 40;
       g.clear();
-      g.lineStyle(1, 0x1A1A40, 1);
+      g.lineStyle(1, this.currentGridColor, 1);
       g.beginPath();
       g.moveTo(0, y);
       g.lineTo(this.W, y);
       g.strokePath();
+    });
+
+    this._updateSpeedLines(delta);
+  }
+
+  _updateSpeedLines(delta) {
+    const ratio = Math.max(0, Math.min(1, (this.speed - GameConfig.OBSTACLE_START_SPEED) / (GameConfig.OBSTACLE_MAX_SPEED - GameConfig.OBSTACLE_START_SPEED)));
+    const baseSpeed = this.speed;
+    const isFever = this.feverActive; 
+    
+    this.speedLines.forEach(line => {
+      const dy = (baseSpeed * line.speedMult * delta) / 1000;
+      line.yPos += dy;
+      
+      if (line.yPos > this.H + line.length) {
+        this._resetSpeedLine(line);
+      }
+      
+      line.clear();
+      const lLength = line.length + (ratio * 150) + (isFever ? 200 : 0);
+      line.lineStyle(isFever ? 3 : 2, isFever ? 0xffffff : 0x444466, line.alphaVal + (ratio * 0.4));
+      line.beginPath();
+      line.moveTo(line.xPos, line.yPos);
+      line.lineTo(line.xPos, line.yPos - lLength);
+      line.strokePath();
     });
   }
 
@@ -538,32 +664,36 @@ export default class GameScene extends Phaser.Scene {
 
   _spawnObstacle() {
     const elapsed = this.elapsedMs;
-    let type = ObstacleType.SINGLE;
-    if (elapsed > GameConfig.DIFFICULTY_HARD * 1000) {
+    let type = ObstacleType.STATIC;
+    
+    if (elapsed > GameConfig.DIFFICULTY_EXPERT * 1000) {
       const r = Math.random();
-      if (r < 0.25) type = ObstacleType.DOUBLE;
-      else if (r < 0.40) type = ObstacleType.RAPID;
+      if (r < 0.30) type = 'DOUBLE';
+      else if (r < 0.60) type = ObstacleType.MOVING;
+    } else if (elapsed > GameConfig.DIFFICULTY_HARD * 1000) {
+      const r = Math.random();
+      if (r < 0.20) type = 'DOUBLE';
+      else if (r < 0.45) type = ObstacleType.MOVING;
     } else if (elapsed > GameConfig.DIFFICULTY_MEDIUM * 1000) {
-      if (Math.random() < 0.12) type = ObstacleType.DOUBLE;
+      if (Math.random() < 0.15) type = 'DOUBLE';
     }
 
-    const colorIndex = Math.floor(Math.random() * GameConfig.COLOR_COUNT);
+    const lane1 = Math.floor(Math.random() * 3);
 
-    if (type === ObstacleType.DOUBLE) {
-      const c2 = (colorIndex + 1) % GameConfig.COLOR_COUNT;
-      this.obstacles.push(new Obstacle(this, this.laneX, -60,  colorIndex, ObstacleType.SINGLE, GameConfig.LANE_WIDTH));
-      this.obstacles.push(new Obstacle(this, this.laneX, -130, c2,         ObstacleType.SINGLE, GameConfig.LANE_WIDTH));
+    if (type === 'DOUBLE') {
+      const lane2 = (lane1 + Math.floor(Math.random() * 2) + 1) % 3;
+      this.obstacles.push(new Obstacle(this, lane1, this.getLaneX.bind(this), -60, ObstacleType.STATIC));
+      this.obstacles.push(new Obstacle(this, lane2, this.getLaneX.bind(this), -60, ObstacleType.STATIC));
     } else {
-      this.obstacles.push(new Obstacle(this, this.laneX, -60, colorIndex, type, GameConfig.LANE_WIDTH));
+      this.obstacles.push(new Obstacle(this, lane1, this.getLaneX.bind(this), -60, type));
     }
   }
 
   _spawnCoinGroup() {
     const count   = Phaser.Math.Between(3, 7);
-    const pattern = Math.random() < 0.5 ? 'line' : 'zigzag';
+    const lane    = Math.floor(Math.random() * 3);
     for (let i = 0; i < count; i++) {
-      let cx = this.laneX;
-      if (pattern === 'zigzag') cx += (i % 2 === 0 ? -32 : 32);
+      let cx = this.getLaneX(lane);
       this.coins.push(new Coin(this, cx, -40 - i * 44));
     }
   }
@@ -571,30 +701,41 @@ export default class GameScene extends Phaser.Scene {
   _spawnPowerUp() {
     const types = [PowerUpType.SHIELD, PowerUpType.SLOWMO, PowerUpType.MAGNET];
     const type  = types[Math.floor(Math.random() * types.length)];
-    this.powerups.push(new PowerUp(this, this.laneX + Phaser.Math.Between(-44, 44), -60, type));
+    const lane  = Math.floor(Math.random() * 3);
+    this.powerups.push(new PowerUp(this, this.getLaneX(lane), -60, type));
   }
 
   _updateObstacles(delta) {
-    const px = this.player.x;
+    const pl = this.player.currentLane;
     const py = this.player.y;
-    const pc = this.player.colorIndex;
     const ps = this.player.hasShield;
 
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
       const obs = this.obstacles[i];
       obs.update(this.speed, delta);
 
-      const result = obs.checkPlayer(px, py, pc, ps);
-      if (result === 'hit') {
+      const result = obs.checkPlayer(pl, py, ps);
+      
+      if (this.feverActive && result === 'hit') {
+        if (!obs.passed) {
+          obs.passed = true;
+          obs._onSuccess(); // Destroy in a cool way
+          this._onObstaclePassed();
+        }
+      } else if (result === 'hit') {
         this._triggerGameOver();
         return;
       } else if (result === 'shield') {
         this.player.consumeShield();
         this.shieldActive = false;
         this._flashLaneBorder(Colors.SHIELD);
-        this._showFloatingText('SHIELD!', Colors.SHIELD);
-      } else if (result === 'pass') {
-        this._onObstaclePassed();
+        this._showFloatingText('HOVERBOARD DESTROYED!', Colors.SHIELD);
+      }
+      
+      // Successfully dodged
+      if (!obs.passed && obs.y > py) {
+         obs.passed = true;
+         this._onObstaclePassed();
       }
 
       if (obs.isOffScreen(this.H)) {
@@ -606,6 +747,7 @@ export default class GameScene extends Phaser.Scene {
 
   _onObstaclePassed() {
     this.combo++;
+    this.totalDodges++;
     if (this.combo > this.comboMax) this.comboMax = this.combo;
 
     if (this.combo >= 3) {
@@ -614,6 +756,10 @@ export default class GameScene extends Phaser.Scene {
       const bonus = Math.floor(this.combo * 2);
       this.score += bonus;
       this._showFloatingText(`+${bonus} COMBO x${this.combo}`, Colors.GAME[2].hex);
+    }
+
+    if (this.combo >= 10 && !this.feverActive) {
+      this._activateFever();
     }
   }
 
@@ -688,7 +834,7 @@ export default class GameScene extends Phaser.Scene {
       case PowerUpType.SHIELD:
         this.shieldActive = true;
         this.player.activateShield();
-        this._showFloatingText('🛡 SHIELD!', Colors.SHIELD);
+        this._showFloatingText('🛹 HOVERBOARD!', Colors.SHIELD);
         break;
       case PowerUpType.SLOWMO:
         this.slowmoActive = true;
@@ -706,6 +852,22 @@ export default class GameScene extends Phaser.Scene {
     this._updatePowerUpHUD();
   }
 
+  _activateFever() {
+    this.feverActive = true;
+    this.feverTimer  = 5000;
+    
+    // Magnet is automatically on during fever
+    this.magnetActive = true;
+    this.magnetTimer = Math.max(this.magnetTimer, 5000);
+
+    // Visuals
+    this._flashScreen(0xFFFFFF, 0.4);
+    this._showFloatingText('🌈 FEVER MODE! 🌈', 0xFFFFFF);
+    AudioManager.powerUp();
+    
+    // Player visuals ( handled in player.js if we want, but for now we can just let particles do the job )
+  }
+
   _updatePowerUpTimers(delta) {
     if (this.slowmoActive) {
       this.slowmoTimer -= delta;
@@ -715,14 +877,27 @@ export default class GameScene extends Phaser.Scene {
       this.magnetTimer -= delta;
       if (this.magnetTimer <= 0) { this.magnetActive = false; this.magnetTimer = 0; }
     }
+    if (this.feverActive) {
+      this.feverTimer -= delta;
+      if (this.feverTimer <= 0) {
+        this.feverActive = false;
+        this.feverTimer = 0;
+        this.combo = 0; // reset combo so we can build it again
+      } else {
+        // rain coins
+        if (Math.random() < 0.15) {
+          const lane = Math.floor(Math.random() * 3);
+          this.coins.push(new Coin(this, this.getLaneX(lane), -20));
+        }
+      }
+    }
     this._updatePowerUpHUD();
   }
 
   _updateScore(delta) {
-    const gained = (this.speed / GameConfig.SCORE_SPEED_DIVISOR) * delta / 1000 * 10;
-    this.score = Math.floor(this.score + gained);
-    this.distanceM = Math.floor(this.distanceM + gained);
-    this.scoreTxt.setText(String(this.score));
+    this.distanceM += (this.speed * GameConfig.SCORE_PER_METER * delta) / 5000;
+    this.score = Math.floor(this.distanceM);
+    this.scoreTxt.setText(`${this.score}m`);
   }
 
   // ── FLOATING TEXT ────────────────────────────────────────────────────────────
@@ -773,6 +948,12 @@ export default class GameScene extends Phaser.Scene {
       const isNew       = SaveSystem.updateBestScore(this.score);
       SaveSystem.addCoins(this.sessionCoins);
       const showIntAd   = SaveSystem.recordGameEnd();
+
+      // Report mission progress
+      MissionsSystem.addProgress('distance', this.score);
+      MissionsSystem.addProgress('coins', this.sessionCoins);
+      MissionsSystem.addProgress('dodges', this.totalDodges);
+      MissionsSystem.addProgress('combo', this.comboMax, true); // isMax = true
 
       this.scene.start('GameOverScene', {
         score:            this.score,

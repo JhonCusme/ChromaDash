@@ -13,6 +13,8 @@ const DEFAULT_SAVE = {
   unlockedSkins: ['default'],
   activeSkin: 'default',
   hasUsedRevive: false,  // reset each game
+  dailyMissions: [],     // array of mission objects
+  lastMissionDate: null, // to track when to regenerate
   settings: {
     sfx: true,
     music: true,

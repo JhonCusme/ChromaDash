@@ -222,6 +222,28 @@ export default class MenuScene extends Phaser.Scene {
         this.scene.start('ShopScene');
       });
 
+    // === MISSIONS BUTTON ===
+    const misY = shopY + shopH + 12;
+    const misW = W * 0.5;
+    const misH = 52;
+
+    const misBg = this.add.graphics();
+    this._drawOutlineButton(misBg, W / 2 - misW / 2, misY, misW, misH, 0x00FF99);
+
+    const misTxt = this.add.text(W / 2, misY + misH / 2, '🎯 MISSIONS', {
+      fontFamily: '"Exo 2", sans-serif',
+      fontSize: '18px',
+      fontStyle: 'bold',
+      color: '#00FF99',
+    }).setOrigin(0.5);
+
+    this.add.zone(W / 2, misY + misH / 2, misW, misH)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        AudioManager.tap();
+        this.scene.start('MissionsScene');
+      });
+
     // Pulse PLAY button
     this.tweens.add({
       targets: playBg,
@@ -320,10 +342,10 @@ export default class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5, 0).setDepth(102);
 
     const steps = [
-      { icon: '👆', title: 'TAP TO CHANGE COLOR', sub: 'Cycles: 🔴 → 🔵 → 🟢 → 🔴' },
-      { icon: '🚪', title: 'MATCH THE GATE',      sub: 'Same color = pass through!' },
-      { icon: '💥', title: 'WRONG COLOR = FAIL',  sub: 'React fast — speed increases!' },
-      { icon: '🪙', title: 'COLLECT COINS',        sub: 'Unlock cosmetic skins' },
+      { icon: '👆', title: 'SWIPE OR TAP', sub: 'Move left and right across lanes' },
+      { icon: '🚧', title: 'DODGE OBSTACLES', sub: 'Avoid walls. Color changes automatically!' },
+      { icon: '🏃', title: 'RUN FAR',  sub: 'Score is based on meters traveled' },
+      { icon: '🪙', title: 'COLLECT COINS', sub: 'Buy skins in the shop' },
     ];
 
     steps.forEach((step, i) => {

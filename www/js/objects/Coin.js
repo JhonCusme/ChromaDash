@@ -115,6 +115,27 @@ export default class Coin {
     AudioManager.coin();
     HapticsManager.light();
 
+    // Particles
+    for (let i = 0; i < GameConfig.PARTICLE_COUNT_COIN; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Phaser.Math.Between(50, 120);
+      const size  = Phaser.Math.Between(2, 5);
+      const p = this.scene.add.arc(this.body.x, this.body.y, size, 0, 360, false, Colors.COIN, 1);
+      p.setDepth(20);
+
+      this.scene.tweens.add({
+        targets: p,
+        x: this.body.x + Math.cos(angle) * speed,
+        y: this.body.y + Math.sin(angle) * speed,
+        alpha: 0,
+        scaleX: 0.2,
+        scaleY: 0.2,
+        duration: Phaser.Math.Between(400, 600),
+        ease: 'Power2',
+        onComplete: () => p.destroy(),
+      });
+    }
+
     // Pop animation
     this.scene.tweens.add({
       targets: [this.body, this.ring],

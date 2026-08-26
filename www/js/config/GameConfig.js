@@ -19,8 +19,11 @@ const GameConfig = {
   PLAYER_COLOR_CHANGE_DURATION: 80, // ms for color tween
 
   // === LANE ===
-  LANE_WIDTH: 220,             // Width of the playable lane
-  LANE_BORDER: 6,
+  LANE_COUNT: 3,
+  LANE_WIDTH: 100,             // Width of a single lane
+  TOTAL_LANE_WIDTH: 300,       // Total width of all 3 lanes combined
+  LANE_BORDER: 4,
+  PLAYER_LANE_SWITCH_SPEED: 120, // ms for lane switch animation
 
   // === OBSTACLES ===
   OBSTACLE_START_SPEED: 320,   // px/sec at start

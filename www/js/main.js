@@ -7,6 +7,7 @@ import MenuScene from './scenes/MenuScene.js';
 import GameScene from './scenes/GameScene.js';
 import GameOverScene from './scenes/GameOverScene.js';
 import ShopScene from './scenes/ShopScene.js';
+import MissionsScene from './scenes/MissionsScene.js';
 
 // Target portrait dimensions (will scale to device)
 const BASE_WIDTH = 480;
@@ -47,6 +48,7 @@ const config = {
     GameScene,
     GameOverScene,
     ShopScene,
+    MissionsScene,
   ],
 };
 
