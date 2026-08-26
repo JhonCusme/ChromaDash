@@ -31,7 +31,10 @@ jobs:
 
       - name: Sync Capacitor
         run: |
-          npm run build
+          mkdir -p www/css www/js
+          cp index.html www/
+          cp -r css/* www/css/
+          cp -r js/* www/js/
           npx cap sync android
 
       - name: Build APK
